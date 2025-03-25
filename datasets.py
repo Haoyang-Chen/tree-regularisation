@@ -1,4 +1,7 @@
 import argparse
+
+import numpy as np
+from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
 from utils import *
 
@@ -19,10 +22,10 @@ def parser():
                         default=2000,
                         help='Number of data instances per sampling. Default: 2000')
 
-    parser.add_argument('--path',
-                        required=True,
-                        type=str,
-                        help='Directory, where the data should be stored.')
+    # parser.add_argument('--path',
+    #                     required=True,
+    #                     type=str,
+    #                     help='Directory, where the data should be stored.')
 
     return parser
 
@@ -140,7 +143,8 @@ def sample_2D_data(num_samples, fun, error, space):
 
 
 if __name__ == '__main__':
-    device = "cuda:0" if torch.cuda.is_available() else 'cpu'
+    # device = "cuda:0" if torch.cuda.is_available() else 'cpu'
+    device = 'mps'
 
     args = parser().parse_args()
     num_samples = args.sample_size
@@ -151,7 +155,7 @@ if __name__ == '__main__':
         fun_name = 'parabola'
         X, Y = sample_2D_data(num_samples, parabola, 0.2, space)
         plot(X, Y, parabola, 0.2, space)
-        save_data(X, Y, f'{args.path}/data_{fun_name}')
+        # save_data(X, Y, f'{args.path}/data_{fun_name}')
 
     elif args.sample == 'cos':
         dim = 2
@@ -159,4 +163,4 @@ if __name__ == '__main__':
         fun_name = 'cos'
         X, Y = sample_2D_data(num_samples, cos, 0.4, space)
         plot(X, Y, cos, 0.4, space)
-        save_data(X, Y, f'{args.path}/data_{fun_name}')
+        # save_data(X, Y, f'{args.path}/data_{fun_name}')

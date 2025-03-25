@@ -11,8 +11,8 @@ torch.random.manual_seed(5255)
 
 warnings.filterwarnings('ignore')
 
-device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-
+# device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+device = 'mps'
 
 class SurrogateNetwork(nn.Module):
     def __init__(self, input_dim):
@@ -60,13 +60,11 @@ class TreeNet(nn.Module):
         super(TreeNet, self).__init__()
 
         self.feed_forward = nn.Sequential(
-            nn.Linear(input_dim, 100),
-            nn.Tanh(),
-            nn.Linear(100, 100),
-            nn.Tanh(),
-            nn.Linear(100, 10),
-            nn.Tanh(),
-            nn.Linear(10, 1)
+            nn.Linear(input_dim, 10),  # Reduce width
+            nn.ReLU(),
+            # nn.Linear(10, 10),
+            # nn.ReLU(),
+            nn.Linear(10, 1),  # Directly to output
         )
         self.surrogate_network = SurrogateNetwork(self.parameters_to_vector().numel())
         self.surrogate_network.freeze_model()

@@ -5,61 +5,34 @@ from sklearn.tree import DecisionTreeClassifier
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import accuracy_score
-from sklearn.tree import export_graphviz
-from six import StringIO
-from IPython.display import Image
-from PIL import Image as ImagePIL
-import pydotplus
+import matplotlib.pyplot as plt
+from sklearn.tree import DecisionTreeClassifier, plot_tree
 
 np.random.seed(5555)
 # device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 device = 'mps'
 
+import torch
+from torch.utils.data import DataLoader, TensorDataset
+
 def get_data_loader(X_train, y_train, X_test, y_test, X_val, y_val, X_type, y_type, batch_size):
-    """Get data loader given training, validation and test data.
+    # Convert DataFrames to NumPy arrays
+    X_train = X_train.values
+    y_train = y_train.values
+    X_test = X_test.values
+    y_test = y_test.values
+    X_val = X_val.values
+    y_val = y_val.values
 
-        Parameters
-        ----------
-        X_train: Training data features
-
-        y_train: Labels for training data
-
-        X_test: Test data features
-
-        y_test: Labels for test data
-
-        X_val: Validation data features
-
-        y_val: Labels for validation data
-
-        X_type: Data type for input features
-
-        y_type: Data type for labels
-
-        batch_size: Batch size for mini-batches
-
-        Returns
-        -------
-        data_train_loader : Data loader for training data
-
-        data_test_loader : Data loader for test data
-
-        data_val_loader : Data loader for validation data
-    """
-
+    # Convert NumPy arrays to tensors
     X_train = torch.tensor(X_train, dtype=X_type).to(device)
+    y_train = torch.tensor(y_train.reshape(-1, 1), dtype=y_type).to(device)
     X_test = torch.tensor(X_test, dtype=X_type).to(device)
+    y_test = torch.tensor(y_test.reshape(-1, 1), dtype=y_type).to(device)
     X_val = torch.tensor(X_val, dtype=X_type).to(device)
+    y_val = torch.tensor(y_val.reshape(-1, 1), dtype=y_type).to(device)
 
-    if len(y_train.shape) <= 2:
-        y_train = torch.tensor(y_train.reshape(-1, 1), dtype=y_type).to(device)
-        y_test = torch.tensor(y_test.reshape(-1, 1), dtype=y_type).to(device)
-        y_val = torch.tensor(y_val.reshape(-1, 1), dtype=y_type).to(device)
-    else:
-        y_train = torch.tensor(y_train, dtype=y_type).to(device)
-        y_test = torch.tensor(y_test, dtype=y_type).to(device)
-        y_val = torch.tensor(y_val, dtype=y_type).to(device)
-
+    # Create DataLoaders
     data_train = TensorDataset(X_train, y_train)
     data_train_loader = DataLoader(dataset=data_train, batch_size=batch_size, shuffle=True)
     data_test = TensorDataset(X_test, y_test)
@@ -89,22 +62,6 @@ def dataloader_to_numpy(dataloader):
     y = dataloader.dataset[:][1].detach().cpu().numpy()
 
     return X, y
-
-
-def colormap(Y):
-    """Convert labels Y into a color-coding list. If y = 0, the color is 'r' (red), otherwise 'b' (blue)
-
-        Parameters
-        ----------
-        Y: Labels
-
-        Returns
-        -------
-        colormap: color-coding for Y
-    """
-    colormap = ['b' if y == 1 else 'r' for y in Y]
-
-    return colormap
 
 
 def post_pruning(X, y):
@@ -148,7 +105,7 @@ def post_pruning(X, y):
     else:
         return 0.0
 
-def build_decision_tree(X_train, y_train, X_test, y_test, space, path, epoch=0, contour_plot=True, min_samples_leaf=1):
+def build_decision_tree(X_train, y_train, X_test, y_test,  min_samples_leaf=1):
     """Build tree given input data and save the corresponding tree plot and contour plot.
 
         Parameters
@@ -160,14 +117,6 @@ def build_decision_tree(X_train, y_train, X_test, y_test, space, path, epoch=0, 
         X_test: Test data features
 
         y_test: Labels for test data
-
-        space: Feature space
-
-        path: Directory, where the plots should be stored
-
-        epoch: Current training epoch, where the snapshot takes place
-
-        contour_plot: Default True, if the contour plots should be drawn (only for 2-dimensional feature space)
 
         min_samples_leaf: Pre-pruning method, default 1 (no pruning)
 
@@ -183,63 +132,40 @@ def build_decision_tree(X_train, y_train, X_test, y_test, space, path, epoch=0, 
     y_hat_tree = clf.predict(X_test)
     accuracy = accuracy_score(y_test, y_hat_tree)
 
-    dot_data = StringIO()
-    export_graphviz(
-        decision_tree=clf,
-        out_file=dot_data,
-        filled=True,
-        rounded=True,
-        special_characters=True,
-        feature_names=['x', 'y'],
-        class_names=['0', '1'])
-    graph = pydotplus.graph_from_dot_data(dot_data.getvalue())
-    graph.write_png(f'{path}.png')
-    Image(graph.create_png())
-
-    if contour_plot:
-        xx, yy = np.meshgrid(np.linspace(space[0][0], space[0][1], 100),
-                             np.linspace(space[0][0], space[0][1], 100))
-        # plt.tight_layout(h_pad=0.5, w_pad=0.5, pad=2.5)
-
-        Z = clf.predict(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
-        fig_contour = plt.figure()
-        plt.contourf(xx, yy, Z, cmap=plt.cm.RdYlBu)
-        # plt.scatter(*X_test.T, c=colormap(y_test), edgecolors='k')
-        plt.title(f'Tree Parabola Contourplot Epoch {epoch}')
-        # plt.tight_layout()
-        plt.savefig(f'{path}_contourplot.png')
-        plt.close(fig_contour)
-
     return accuracy
 
-def pred_contours(x, y, model):
-    """Given input data, compute the contours of the prediciont to draw the contour plots.
 
-        Parameters
-        ----------
-        x: Input data as meshgrid
+def plot_decision_tree(X_train, y_train):
+    ccp_alpha = post_pruning(X_train, y_train)
+    clf = DecisionTreeClassifier(random_state=42, ccp_alpha=ccp_alpha)
+    clf.fit(X_train, y_train)
 
-        y: Labels as meshgrid
+    # Convert X_train to DataFrame if it's a NumPy array
+    feature_names = None
+    if isinstance(X_train, np.ndarray):
+        feature_names = [f"Feature {i}" for i in range(X_train.shape[1])]
+    else:
+        feature_names = X_train.columns
 
-        model: Trained deep model
+    # Plot the decision tree
+    # Adjust figure size
+    plt.figure(figsize=(16, 10))  # Increase figure size
+
+    # Plot the decision tree with larger font sizes
+    plot_tree(
+        clf,
+        filled=True,
+        feature_names=feature_names,
+        class_names=[str(c) for c in clf.classes_],
+        fontsize=12,  # Increase font size
+        proportion=True  # Normalize box sizes
+    )
+
+    plt.title("Decision Tree Visualization")
+    plt.show()
+    return clf
 
 
-        Returns
-        -------
-        y_pred : Model predictions as predictions contours
-    """
-
-    data = np.c_[x.ravel(), y.ravel()]
-    y_pred = []
-
-    for d in data:
-        y_hat = model(torch.tensor(d, dtype=torch.float, device='mps'))
-        y_pred.append(y_hat.detach().cpu().numpy())
-
-    y_pred = np.array(y_pred)
-    y_pred = np.where(y_pred > 0.5, 1, 0)
-
-    return y_pred
 
 
 def augment_data_with_dirichlet(X_train, parameters, model, device, num_new_samples):
