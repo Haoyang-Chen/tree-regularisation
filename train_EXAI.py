@@ -40,7 +40,7 @@ def parser():
 
     parser.add_argument('--ep',
                         required=False,
-                        default=50,
+                        default=20,
                         type=int,
                         help='Total number of epochs, default 1000 (300 warm up + 700 regularisation)')
 
@@ -51,7 +51,7 @@ def parser():
                         help='Minimum samples leaf for pre-pruning, default 5')
 
     parser.add_argument('--batch',
-                        default=64,
+                        default=128,
                         required=False,
                         help='Batch size, default 1024')
 
@@ -154,9 +154,7 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
     alpha = alphas[str(float(lambda_target))]
     cooling_fun = lambda k: lambda_target + (lambda_init - lambda_target) * (1 / (1 + np.exp(((alpha * np.log((np.abs(lambda_init - lambda_target))) / epochs_reg) * (k - epochs_reg / 2)))))
 
-    # Objectives and Optimizer
-    pos_weight = torch.tensor([y_train.sum() / (len(y_train) - y_train.sum())], dtype=torch.float).to(device)
-    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(3.1238, dtype=torch.float64))
     optimizer = Adam(model.feed_forward.parameters(), lr=1e-3)
 
     criterion_sr = nn.MSELoss()
@@ -223,10 +221,10 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
 
             if epoch > (epochs_warm_up - 1): # regularisation phase
                 omega = model.compute_APL_prediction()
-                loss = 2*criterion(input=y_hat, target=y) + lambda_ * omega
+                loss = 5*criterion(input=y_hat, target=y) + lambda_ * omega
                 # loss = 2 * criterion(input=y_hat, target=y)
             else: # warm-up phase
-                loss = 2*criterion(input=y_hat, target=y)
+                loss = 5*criterion(input=y_hat, target=y)
                 x_iter_warm_up += 1
 
             loss_without_reg = criterion(input=y_hat, target=y)  # Only for plotting, not for optimisation

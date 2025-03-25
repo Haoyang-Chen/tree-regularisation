@@ -60,11 +60,11 @@ class TreeNet(nn.Module):
         super(TreeNet, self).__init__()
 
         self.feed_forward = nn.Sequential(
-            nn.Linear(input_dim, 10),  # Reduce width
+            nn.Linear(input_dim, 16),
             nn.ReLU(),
-            # nn.Linear(10, 10),
-            # nn.ReLU(),
-            nn.Linear(10, 1),  # Directly to output
+            nn.Linear(16, 8),
+            nn.ReLU(),
+            nn.Linear(8, 1)
         )
         self.surrogate_network = SurrogateNetwork(self.parameters_to_vector().numel())
         self.surrogate_network.freeze_model()
