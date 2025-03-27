@@ -40,7 +40,7 @@ def parser():
 
     parser.add_argument('--ep',
                         required=False,
-                        default=20,
+                        default=50,
                         type=int,
                         help='Total number of epochs, default 1000 (300 warm up + 700 regularisation)')
 
@@ -96,7 +96,7 @@ def train_surrogate_model(X, y, criterion, optimizer, model):
 
     model.surrogate_network.to(device)
 
-    num_epochs = 5
+    num_epochs = 10
     batch_size = 256
 
     data_train = TensorDataset(X_train, y_train)
@@ -136,7 +136,7 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
     # Hypterparameters
     num_random_restarts = 50
     total_num_epochs = args.ep
-    epochs_warm_up = 6
+    epochs_warm_up = 10
     epochs_reg = total_num_epochs - epochs_warm_up
     lambda_init = args.lambda_init
     lambda_target = args.lambda_target
@@ -221,10 +221,10 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
 
             if epoch > (epochs_warm_up - 1): # regularisation phase
                 omega = model.compute_APL_prediction()
-                loss = 5*criterion(input=y_hat, target=y) + lambda_ * omega
+                loss = 2*criterion(input=y_hat, target=y) + lambda_ * omega
                 # loss = 2 * criterion(input=y_hat, target=y)
             else: # warm-up phase
-                loss = 5*criterion(input=y_hat, target=y)
+                loss = 2*criterion(input=y_hat, target=y)
                 x_iter_warm_up += 1
 
             loss_without_reg = criterion(input=y_hat, target=y)  # Only for plotting, not for optimisation
