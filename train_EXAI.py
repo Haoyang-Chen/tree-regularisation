@@ -6,11 +6,10 @@ from torch import nn
 from torch.optim import Adam
 from torch.utils.tensorboard import SummaryWriter
 from datasets import parabola, cos, sample_2D_data
-import networks
+from networks_EXAI import TreeNet
 from utils_EXAI import *
 import argparse
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix, classification_report, accuracy_score
-
 
 
 np.random.seed(5555)
@@ -130,7 +129,7 @@ def train_surrogate_model(X, y, criterion, optimizer, model):
 
 def train(data_train_loader, data_test_loader, data_val_loader, path):
 
-    model = networks.TreeNet(input_dim=dim, min_samples_leaf=args.min_samples_leaf)
+    model = TreeNet(input_dim=dim, min_samples_leaf=args.min_samples_leaf)
     model.to(device)
 
     # Hypterparameters
@@ -161,10 +160,13 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
     optimizer_sr = Adam(model.surrogate_network.parameters(), lr=1e-3, weight_decay=1e-5)
 
     input_surrogate = []
-    APLs_surrogate = []
+    # APLs_surrogate = []
+    # APLs_truth = []
+    # APL_predictions = []
 
-    APLs_truth = []
-    APL_predictions = []
+    TEDs_surrogate=[]
+    TEDs_truth=[]
+    TED_predictions=[]
 
     training_loss_without_reg = []
     val_loss = []
@@ -182,8 +184,11 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
 
         model.reset_outer_weights()
         input_surrogate.append(model.parameters_to_vector())
-        APL = model.compute_APL(data_train_loader_new.dataset[:][0])
-        APLs_surrogate.append(APL)
+        # APL = model.compute_APL(data_train_loader_new.dataset[:][0])
+        # APLs_surrogate.append(APL)
+        TED= model.compute_TED(data_train_loader_new.dataset[:][0])
+        TEDs_surrogate.append(TED)
+
         print(f'Random restart [{i + 1}/{num_random_restarts}]')
 
     for epoch in range(total_num_epochs):
@@ -198,13 +203,19 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
                 lambda_ = cooling_fun(epoch - epochs_warm_up)
                 lambdas.append(lambda_)
 
-            input_surrogate_augmented, APLs_surrogate_augmented = augment_data_with_dirichlet(data_train_loader.dataset[:][0], input_surrogate, networks.TreeNet(input_dim=dim), device, 500)
+            # input_surrogate_augmented, APLs_surrogate_augmented = augment_data_with_dirichlet(data_train_loader.dataset[:][0], input_surrogate, networks.TreeNet(input_dim=dim), device, 500)
+            input_surrogate_augmented, TEDs_surrogate_augmented = augment_data_with_dirichlet(data_train_loader.dataset[:][0], input_surrogate, TreeNet(input_dim=dim), device, 500)
+
             model.freeze_model()
             model.surrogate_network.unfreeze_model()
 
             input_surrogate_augmented = input_surrogate + input_surrogate_augmented
-            APLs_surrogate_augmented = APLs_surrogate + APLs_surrogate_augmented
-            sr_train_loss = train_surrogate_model(input_surrogate_augmented, APLs_surrogate_augmented, criterion_sr, optimizer_sr, model)
+            # APLs_surrogate_augmented = APLs_surrogate + APLs_surrogate_augmented
+            TEDs_surrogate_augmented = TEDs_surrogate + TEDs_surrogate_augmented
+
+            # sr_train_loss = train_surrogate_model(input_surrogate_augmented, APLs_surrogate_augmented, criterion_sr, optimizer_sr, model)
+            sr_train_loss = train_surrogate_model(input_surrogate_augmented, TEDs_surrogate_augmented, criterion_sr, optimizer_sr, model)
+
             surrogate_training_loss.append(sr_train_loss)
 
             model.surrogate_network.freeze_model()
@@ -212,7 +223,8 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
             model.surrogate_network.eval()
 
             del input_surrogate_augmented
-            del APLs_surrogate_augmented
+            # del APLs_surrogate_augmented
+            del TEDs_surrogate_augmented
             del sr_train_loss
 
         for (x, y) in data_train_loader:
@@ -231,7 +243,8 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
             batch_loss_without_reg.append(float(loss_without_reg))
             del loss_without_reg
 
-            APL_predictions.append(model.compute_APL_prediction().cpu().detach().numpy())
+            # APL_predictions.append(model.compute_APL_prediction().cpu().detach().numpy())
+            TED_predictions.append(model.compute_TED_prediction().cpu().detach().numpy())
 
             iters_per_epoch += 1 if epoch == 0 else 0
 
@@ -242,9 +255,13 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
             # Collect weights and APLs for surrogate training
             input_surrogate.append(model.parameters_to_vector())
             data_train_loader_new, _ = resample_data()
-            APL = model.compute_APL(data_train_loader_new.dataset[:][0])
-            APLs_surrogate.append(APL)
-            APLs_truth.append(APL)
+            # APL = model.compute_APL(data_train_loader_new.dataset[:][0])
+            # APLs_surrogate.append(APL)
+            # APLs_truth.append(APL)
+
+            TED = model.compute_TED(data_train_loader_new.dataset[:][0])
+            TEDs_surrogate.append(TED)
+            TEDs_truth.append(TED)
 
             del x, y
 
@@ -311,19 +328,34 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
     fig.savefig(f'{path}/surrogate_training_loss.png')
     plt.close(fig)
 
+    # fig = plt.figure()
+    # plt.plot(range(0, len(APLs_truth)), APLs_truth, color='y', label='true APL')
+    # plt.plot(range(0, len(APL_predictions)), APL_predictions, color='g', label='predicted APL $\hat{\Omega}(W)$')
+    # plt.vlines(x_iter_warm_up, 0, max(APLs_truth), linestyles="dashed", colors='r')
+    # plt.xlabel('iterations')
+    # plt.ylabel('path length')
+    # plt.legend()
+    # plt.annotate("warm up", (x_iter_warm_up/2, 0.5))
+    # plt.annotate("regularization", (x_iter_warm_up + 1000, 0.5))
+    # plt.grid()
+    # plt.title(f'Path length estimates')
+    # fig.tight_layout()
+    # fig.savefig(f'{path}/path_estimates.png')
+    # plt.close(fig)
+
     fig = plt.figure()
-    plt.plot(range(0, len(APLs_truth)), APLs_truth, color='y', label='true APL')
-    plt.plot(range(0, len(APL_predictions)), APL_predictions, color='g', label='predicted APL $\hat{\Omega}(W)$')
-    plt.vlines(x_iter_warm_up, 0, max(APLs_truth), linestyles="dashed", colors='r')
+    plt.plot(range(0, len(TEDs_truth)), TEDs_truth, color='y', label='true TED')
+    plt.plot(range(0, len(TED_predictions)), TED_predictions, color='g', label='predicted TED $\hat{\Omega}(W)$')
+    plt.vlines(x_iter_warm_up, 0, max(TEDs_truth), linestyles="dashed", colors='r')
     plt.xlabel('iterations')
-    plt.ylabel('path length')
+    plt.ylabel('TED')
     plt.legend()
     plt.annotate("warm up", (x_iter_warm_up/2, 0.5))
     plt.annotate("regularization", (x_iter_warm_up + 1000, 0.5))
     plt.grid()
-    plt.title(f'Path length estimates')
+    plt.title(f'TED estimates')
     fig.tight_layout()
-    fig.savefig(f'{path}/path_estimates.png')
+    fig.savefig(f'{path}/TED_estimates.png')
     plt.close(fig)
 
     fig = plt.figure()
@@ -361,7 +393,8 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
     #     writer.add_scalar(f'Surrogate Training Loss', value, i)
 
     del input_surrogate
-    del APLs_surrogate
+    # del APLs_surrogate
+    del TEDs_surrogate
     del criterion_sr
     del optimizer_sr
 

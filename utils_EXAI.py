@@ -191,7 +191,8 @@ def augment_data_with_dirichlet(X_train, parameters, model, device, num_new_samp
     """
 
     parameters_new = []
-    APLs_new = []
+    # APLs_new = []
+    TEDs_new=[]
 
     alpha = [1] * len(parameters)
     samples = np.random.dirichlet(alpha, num_new_samples)
@@ -204,16 +205,19 @@ def augment_data_with_dirichlet(X_train, parameters, model, device, num_new_samp
 
     for param in parameters_:
         model.vector_to_parameters(param)
-        APL = model.compute_APL(X_train)
+        # APL = model.compute_APL(X_train)
+        TED = model.compute_TED(X_train)
 
         parameters_new.append(param)
-        APLs_new.append(APL)
+        # APLs_new.append(APL)
+        TEDs_new.append(TED)
 
     del model
     del parameters_
     del samples
 
-    return parameters_new, APLs_new
+    # return parameters_new, APLs_new
+    return parameters_new, TEDs_new
 
 
 def augment_data_with_gaussian(X_train, model, device, size):
