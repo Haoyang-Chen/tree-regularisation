@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from sklearn.tree import DecisionTreeClassifier, plot_tree
 
 np.random.seed(5555)
+
 # device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 device = 'mps'
 

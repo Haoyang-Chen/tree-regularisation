@@ -5,8 +5,8 @@ from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.optim import Adam
 # from torch.utils.tensorboard import SummaryWriter
-# from datasets import parabola, cos, sample_2D_data
-from networks_EXAI import TreeNet
+
+from networks_EXAI_test import TreeNet
 from utils_EXAI import *
 import argparse
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix, classification_report, accuracy_score
@@ -28,7 +28,7 @@ def parser():
     parser.add_argument('--lambda_init',
                         required=False,
                         type=float,
-                        default=0.1,
+                        default=0.5,
                         help='Initial lambda value as regularisation term')
 
     parser.add_argument('--lambda_target',
@@ -50,7 +50,7 @@ def parser():
                         help='Minimum samples leaf for pre-pruning, default 5')
 
     parser.add_argument('--batch',
-                        default=512,
+                        default=128,
                         required=False,
                         help='Batch size, default 1024')
 
@@ -88,108 +88,31 @@ def resample_data():
     return data_train_loader, data_test_loader
 
 
-def train_surrogate_model(X, y, criterion, optimizer, model):
-
-    X_train = torch.vstack(X).detach()
-    y_train = torch.tensor([y], dtype=torch.float).T.to(device)
-
-    model.surrogate_network.to(device)
-
-    num_epochs = 10
-    batch_size = 256
-
-    data_train = TensorDataset(X_train, y_train)
-    data_train_loader = DataLoader(dataset=data_train, batch_size=batch_size, shuffle=True)
-
-    training_loss = []
-
-    model.surrogate_network.train()
-
-    for epoch in range(num_epochs):
-        batch_loss = []
-
-        for (x, y) in data_train_loader:
-            y_hat = model.surrogate_network(x)
-            loss = criterion(input=y_hat, target=y)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            batch_loss.append(loss.item() / (torch.var(y_train).item() + 0.01))
-
-        training_loss.append(np.array(batch_loss).mean())
-
-        print(f'Surrogate Model: Epoch [{epoch + 1}/{num_epochs}, Loss: {np.array(batch_loss).mean():.4f}]')
-
-    del X
-    del y
-
-    return training_loss
-
-
 def train(data_train_loader, data_test_loader, data_val_loader, path):
 
     model = TreeNet(input_dim=dim, min_samples_leaf=args.min_samples_leaf)
     model.to(device)
 
-    # Hypterparameters
-    num_random_restarts = 50
     total_num_epochs = args.ep
     epochs_warm_up = 5
-    epochs_reg = total_num_epochs - epochs_warm_up
     lambda_init = args.lambda_init
-    lambda_target = args.lambda_target
     lambda_ = lambda_init
-
-    alphas = {
-        '0.5': -20,
-        '1.0': -13000,
-        '2.0': 20,
-        '3.0': 13,
-        '4.0': 10,
-        '5.0': 8
-    }
-
-    alpha = alphas[str(float(lambda_target))]
-    cooling_fun = lambda k: lambda_target + (lambda_init - lambda_target) * (1 / (1 + np.exp(((alpha * np.log((np.abs(lambda_init - lambda_target))) / epochs_reg) * (k - epochs_reg / 2)))))
 
     criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(3.1238, dtype=torch.float64))
     optimizer = Adam(model.feed_forward.parameters(), lr=1e-3)
 
-    criterion_sr = nn.MSELoss()
-    optimizer_sr = Adam(model.surrogate_network.parameters(), lr=1e-3, weight_decay=1e-5)
-
-    input_surrogate = []
-    # APLs_surrogate = []
-    # APLs_truth = []
-    # APL_predictions = []
-
-    TEDs_surrogate=[]
     TEDs_truth=[]
-    TED_predictions=[]
 
     training_loss_without_reg = []
     val_loss = []
     training_accuracy = []
     tree_accuracy = []
-    surrogate_training_loss = []
 
     lambdas = [lambda_]
 
     x_iter_warm_up = 0
     iters_per_epoch = 0
 
-    for i in range(num_random_restarts):
-        data_train_loader_new, _ = resample_data()
-
-        model.reset_outer_weights()
-        input_surrogate.append(model.parameters_to_vector())
-        # APL = model.compute_APL(data_train_loader_new.dataset[:][0])
-        # APLs_surrogate.append(APL)
-        TED= model.compute_TED(data_train_loader_new.dataset[:][0])
-        TEDs_surrogate.append(TED)
-
-        print(f'Random restart [{i + 1}/{num_random_restarts}]')
 
     for epoch in range(total_num_epochs):
         model.train()
@@ -198,44 +121,14 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
         batch_TED_loss = []
         batch_accuracy = []
 
-        if epoch > 0:
-
-            if epoch > (epochs_warm_up - 1):
-                lambda_ = cooling_fun(epoch - epochs_warm_up)
-                lambdas.append(lambda_)
-
-            # input_surrogate_augmented, APLs_surrogate_augmented = augment_data_with_dirichlet(data_train_loader.dataset[:][0], input_surrogate, networks.TreeNet(input_dim=dim), device, 500)
-            input_surrogate_augmented, TEDs_surrogate_augmented = augment_data_with_dirichlet(data_train_loader.dataset[:][0], input_surrogate, TreeNet(input_dim=dim), device, 500)
-
-            model.freeze_model()
-            model.surrogate_network.unfreeze_model()
-
-            input_surrogate_augmented = input_surrogate + input_surrogate_augmented
-            # APLs_surrogate_augmented = APLs_surrogate + APLs_surrogate_augmented
-            TEDs_surrogate_augmented = TEDs_surrogate + TEDs_surrogate_augmented
-
-            # sr_train_loss = train_surrogate_model(input_surrogate_augmented, APLs_surrogate_augmented, criterion_sr, optimizer_sr, model)
-            sr_train_loss = train_surrogate_model(input_surrogate_augmented, TEDs_surrogate_augmented, criterion_sr, optimizer_sr, model)
-
-            surrogate_training_loss.append(sr_train_loss)
-
-            model.surrogate_network.freeze_model()
-            model.unfreeze_model()
-            model.surrogate_network.eval()
-
-            del input_surrogate_augmented
-            # del APLs_surrogate_augmented
-            del TEDs_surrogate_augmented
-            del sr_train_loss
-
         for (x, y) in data_train_loader:
 
             y_hat = model(x)
 
             if epoch > (epochs_warm_up - 1): # regularisation phase
-                omega = model.compute_TED_prediction()
+                omega = model.compute_TED(data_train_loader.dataset[:][0])
                 loss = 2*criterion(input=y_hat, target=y) + lambda_ * omega
-                # loss = 2 * criterion(input=y_hat, target=y)
+
             else: # warm-up phase
                 loss = 2*criterion(input=y_hat, target=y)
                 x_iter_warm_up += 1
@@ -244,35 +137,26 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
             batch_loss_without_reg.append(float(loss_without_reg))
             del loss_without_reg
 
-            # APL_predictions.append(model.compute_APL_prediction().cpu().detach().numpy())
-            TED_predictions.append(model.compute_TED_prediction().cpu().detach().numpy())
-
             iters_per_epoch += 1 if epoch == 0 else 0
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            # Collect weights and APLs for surrogate training
-            input_surrogate.append(model.parameters_to_vector())
             data_train_loader_new, _ = resample_data()
-            # APL = model.compute_APL(data_train_loader_new.dataset[:][0])
-            # APLs_surrogate.append(APL)
-            # APLs_truth.append(APL)
 
             TED = model.compute_TED(data_train_loader_new.dataset[:][0])
-            batch_TED_loss.append(TED * lambda_)
-            TEDs_surrogate.append(TED)
+            batch_TED_loss.append(TED*lambda_)
             TEDs_truth.append(TED)
 
             del x, y
 
-        if epoch > 0 and epoch % 10 == 0:  # snapshots of the resulting tree
-            if not os.path.exists('models'):
-                os.makedirs('models')
-            torch.save(model.state_dict(), f'models/model_snapshot_{epoch}.pth')
-            model.eval()
-            model.train()
+        # if epoch > 0 and epoch % 10 == 0:  # snapshots of the resulting tree
+        #     if not os.path.exists('models'):
+        #         os.makedirs('models')
+        #     torch.save(model.state_dict(), f'models/model_snapshot_{epoch}.pth')
+        #     model.eval()
+        #     model.train()
 
         # Validation
         model.eval()
@@ -305,7 +189,6 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
         tree_accuracy.append(acc)
 
     # PLOTS
-    surrogate_training_loss = torch.tensor(surrogate_training_loss).flatten()
 
     fig = plt.figure()
     plt.plot(range(0, len(training_loss_without_reg)), training_loss_without_reg, label='Training loss')
@@ -320,40 +203,10 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
     plt.close(fig)
 
     fig = plt.figure()
-    plt.plot(range(0, len(surrogate_training_loss)), surrogate_training_loss)
-    plt.xlabel(f'epochs ({iters_per_epoch} iterations per epoch)')
-    plt.ylim([0, 1.0])
-    plt.ylabel('loss')
-    plt.grid()
-    plt.title(f'Surrogate Training Loss')
-    fig.tight_layout()
-    fig.savefig(f'{path}/surrogate_training_loss.png')
-    plt.close(fig)
-
-    # fig = plt.figure()
-    # plt.plot(range(0, len(APLs_truth)), APLs_truth, color='y', label='true APL')
-    # plt.plot(range(0, len(APL_predictions)), APL_predictions, color='g', label='predicted APL $\hat{\Omega}(W)$')
-    # plt.vlines(x_iter_warm_up, 0, max(APLs_truth), linestyles="dashed", colors='r')
-    # plt.xlabel('iterations')
-    # plt.ylabel('path length')
-    # plt.legend()
-    # plt.annotate("warm up", (x_iter_warm_up/2, 0.5))
-    # plt.annotate("regularization", (x_iter_warm_up + 1000, 0.5))
-    # plt.grid()
-    # plt.title(f'Path length estimates')
-    # fig.tight_layout()
-    # fig.savefig(f'{path}/path_estimates.png')
-    # plt.close(fig)
-
-    fig = plt.figure()
     plt.plot(range(0, len(TEDs_truth)), TEDs_truth, color='y', label='true TED')
-    plt.plot(range(0, len(TED_predictions)), TED_predictions, color='g', label='predicted TED $\hat{\Omega}(W)$')
-    plt.vlines(x_iter_warm_up, 0, max(TEDs_truth), linestyles="dashed", colors='r')
     plt.xlabel('iterations')
     plt.ylabel('TED')
     plt.legend()
-    plt.annotate("warm up", (x_iter_warm_up/2, 0.5))
-    plt.annotate("regularization", (x_iter_warm_up + 1000, 0.5))
     plt.grid()
     plt.title(f'TED estimates')
     fig.tight_layout()
@@ -372,15 +225,6 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
     fig.savefig(f'{path}/accuracy.png')
     plt.close(fig)
 
-    fig = plt.figure()
-    plt.plot(range(epochs_warm_up, len(lambdas) + epochs_warm_up), lambdas)
-    plt.xlabel(f'epochs ({iters_per_epoch} iterations per epoch)')
-    plt.ylabel('$\lambda$')
-    plt.grid()
-    plt.title(f'$\lambda$ curve')
-    plt.savefig(f'{path}/lambda_curve.png')
-    plt.close(fig)
-
     # for i, value in enumerate(surrogate_training_loss):
     #     writer.add_scalar(f'Surrogate Training/Loss of surrogate training after epoch {i}', value, i)
     #
@@ -394,11 +238,6 @@ def train(data_train_loader, data_test_loader, data_val_loader, path):
     #     writer.add_scalar(f'Surrogate Training Loss', value, i)
     #     writer.add_scalar(f'Surrogate Training Loss', value, i)
 
-    del input_surrogate
-    # del APLs_surrogate
-    del TEDs_surrogate
-    del criterion_sr
-    del optimizer_sr
 
     return model, criterion
 
