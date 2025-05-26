@@ -4,7 +4,7 @@ import os
 
 
 # Load the Excel file
-data = pd.read_excel("dataset/adult_income_female/adult_dataset_female.xlsx")
+data = pd.read_excel("dataset/adult_income_male/adult_dataset_male.xlsx")
 
 # Split data into train (70%), temp (30%)
 train_data, temp_data = train_test_split(data, test_size=0.3, random_state=42)

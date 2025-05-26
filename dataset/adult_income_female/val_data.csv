@@ -1,4 +1,4 @@
-age,education-num,hours-per-week,income_high
+age,education,hours-per-week,income
 57,9,36,0
 33,13,40,1
 21,9,40,0

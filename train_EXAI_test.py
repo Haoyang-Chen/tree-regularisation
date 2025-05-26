@@ -6,7 +6,7 @@ from torch import nn
 from torch.optim import Adam
 # from torch.utils.tensorboard import SummaryWriter
 
-from networks_EXAI_test import TreeNet
+from networks_EXAI_TED import TreeNet
 from utils_EXAI import *
 import argparse
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix, classification_report, accuracy_score

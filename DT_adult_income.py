@@ -9,7 +9,7 @@ import os
 # 1. Load Preprocessed Dataset
 # --------------------------- #
 
-dataset_dir = os.path.join('dataset', 'adult_income')
+dataset_dir = os.path.join('dataset', 'adult_income_male')
 
 train_df = pd.read_csv(os.path.join(dataset_dir, 'train_data.csv'))
 val_df = pd.read_csv(os.path.join(dataset_dir, 'val_data.csv'))
@@ -31,9 +31,8 @@ y_test = test_df['income']
 # ------------------------------- #
 
 clf = DecisionTreeClassifier(
-    max_depth=3,
-    min_samples_leaf=50,  # Ensure enough samples per leaf
-    random_state=42
+    random_state=42,
+    class_weight="balanced",
 )
 
 clf.fit(X_train, y_train)
@@ -61,7 +60,7 @@ evaluate_model(clf, X_test, y_test, "Test Set")
 # 4. Visualize the Tree (Optional)
 # ---------------------- #
 
-plt.figure(figsize=(40, 20))
+plt.figure(figsize=(24, 15))
 plot_tree(clf, filled=True, feature_names=X_train.columns, class_names=['<=50K', '>50K'], fontsize=15)
 plt.title("Decision Tree (Depth 5)")
 plt.show()
